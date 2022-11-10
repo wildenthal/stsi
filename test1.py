@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import tqdm
 
 def get_iter(c:complex, thresh:int =4, max_steps:int =25) -> int:
     # Z_(n) = (Z_(n-1))^2 + c
@@ -16,13 +17,13 @@ def plotter(n, thresh, max_steps=25):
     my = 2.26 / (n-1)
     mapper = lambda x,y: (mx*x - 2, my*y - 1.13)
     img=np.full((n,n), 255)
-    for x in range(n):
+    for x in tqdm.tqdm(range(n)):
         for y in range(n):
             it = get_iter(complex(*mapper(x,y)), thresh=thresh, max_steps=max_steps)
             img[y][x] = 255 - it
     return img
     
-n=1000
+n=10000 
 img = plotter(n, thresh=4, max_steps=50)
 plt.imshow(img, cmap="plasma")
 plt.axis("off")
