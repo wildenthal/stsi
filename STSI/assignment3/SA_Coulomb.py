@@ -6,9 +6,9 @@ import warnings
 
 def main():
     # parameters
-    N = 4 #charges
-    iterations = 500
-    T = np.e**5 #temperature
+    N = 22 #charges
+    iterations = 50
+    T = np.e**10 #temperature
     T0=T
     r = 0.01
     history = np.empty((iterations,N,2))
@@ -22,9 +22,9 @@ def main():
     run = 0
     while T > 1e-9:   
         for i in range(1, iterations):
-            newstep = proposeRandomStep(pos,max(T/T0,1e-9),T)
+            newstep = proposeForcedStep(pos,max(0.25*T/T0,0.0001),T)
             pos = decide(pos, newstep, T)
-            history[i] = pos
+        history = np.append(history,[pos],axis=0)
         print('\r Run {}, temperature {:.2e}'.format(run,T))
         run += 1
         T *= 0.95
@@ -74,7 +74,7 @@ def forces(pos):
     forces = np.nan_to_num(forces, posinf = 0.0, neginf = 0.0)
     return np.sum(forces,axis=1)
 
-def proposeForcedStep(pos, stepsize = 0.05):
+def proposeForcedStep(pos,stepsize,T):
     '''
         Takes in an array of particle positions of size (N,2), generates 
         displacements according to parameter stepsize in the direction given
@@ -83,19 +83,19 @@ def proposeForcedStep(pos, stepsize = 0.05):
         and returns the new array of positions.
     
     '''
-    stepsize /= 2 
     forceArray = forces(pos)
     forceArray /= np.linalg.norm(forceArray,axis=1)[:,np.newaxis]
     for ip in range(len(pos)):
-        x = stepsize*forceArray[ip][0]
-        x += stepsize*np.random.uniform(low=-1.0,high=1.0) 
-        y = stepsize*forceArray[ip][1]
-        y += stepsize*np.random.uniform(low=-1.0,high=1.0)
-        new = pos[ip] + [x,y]
+        ppos = pos
+        x = np.random.normal(forceArray[ip][0],0.5) 
+        y = np.random.normal(forceArray[ip][1],0.5) 
+        norma = np.linalg.norm([x,y])            
+        new = pos[ip] + [x*(stepsize/norma),y*(stepsize/norma)]
         newnorm = np.linalg.norm(new)
         if newnorm > 1:
             new /= newnorm
-        pos[ip] = new
+        ppos[ip] = new
+        pos = decide(pos,ppos,T)
     return pos
 
 def proposeRandomStep(pos, stepsize,T):
