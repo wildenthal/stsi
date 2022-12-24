@@ -3,47 +3,61 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from math import pi
 import warnings
+from tqdm import tqdm
+from time import sleep
 
 def main():
-    # parameters
-    N = 11
-    iterations = 100
-    T = np.e**2
-    r = 0.01
-    history = np.empty((iterations,N,2))
+    N = 11 # number of charges
+
+    # sets an exponential cooling
+    T0    = 1e2  #initial temperature
+    T1    = 1e-9 #final temperature
+    rate  = 0.99 #cooling rate
+    steps = int(np.log(T1/T0)/np.log(rate)) #steps to reach cooling
+    T = T0
+    cool = lambda T: T*rate
     
     
     # set initial positions of particles as circle of radius r
-    pos = np.array([[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)])
-    history[0] = pos
+    r = 0.5
+    position = [[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)]
+    position = np.array(position)
     
+    #sets up history array
+    history = np.empty((steps,N,2), dtype='float64')
+    history[0] = position
+
     # sample new positions
-    run = 0
-    while T > 1e-9:   
-        for i in range(1, iterations):
-            newstep = proposeForcedStep(pos)
-            pos = decide(pos, newstep, T)
-            history[i] = pos
-        print('\r Run {}, temperature {:.2e}'.format(run,T), end="")
-        run += 1
-        T *= 0.9
-        
-    # plot movement
-    #makePlots(history)
-    movie = AnimatedScatter(history)
+    T = T0
+    for step in tqdm(range(1,steps)):
+        position = takeRandomStep(position, T)
+        history[step] = position
+        T = cool(T)
+    
+    #make movie
+    frames = 200
+    slicing = int(steps/frames) # array must be sliced to get specified frames
+    sliced = history[0::slicing]
+    movie = AnimatedScatter(sliced)
     movie.save()
 
 def test():
     r = 1
     N = 11
-    M = 10
-    pos1 = np.array([[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)])
-    pos2 = np.array([[r*np.cos(2*k*pi/M),r*np.sin(2*k*pi/M)] for k in range(M)])
+    M = N-1
+    
+    posSym = [[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)]
+    posAsym = [[r*np.cos(2*k*pi/M),r*np.sin(2*k*pi/M)] for k in range(M)]
+    
+    pos1 = np.array(posSym)
+    pos2 = np.array(posAsym)
     pos2 = np.append(pos2, np.array([[0,0]]),axis=0)
     history=[pos1,pos2]
     makePlots(history)
-    print('The energy for the symmetric arrangement is {}'.format(energy(pos1)))
-    print('The energy for the asymmetric arrangement is {}'.format(energy(pos2)))
+    sym = 'The energy for the symmetric arrangement with {} particles is {}'
+    print(sym.format(N,energy(pos1)))
+    asym = 'The energy for the asymmetric arrangement with {} particles is {}'
+    print(asym.format(N,energy(pos2)))
 
 def energy(pos):
     '''
@@ -74,7 +88,7 @@ def forces(pos):
     forces = np.nan_to_num(forces, posinf = 0.0, neginf = 0.0)
     return np.sum(forces,axis=1)
 
-def proposeForcedStep(pos, stepsize = 0.05):
+def proposeForcedStep(pos, stepsize = 0.005):
     '''
         Takes in an array of particle positions of size (N,2), generates 
         displacements according to parameter stepsize in the direction given
@@ -98,7 +112,7 @@ def proposeForcedStep(pos, stepsize = 0.05):
         pos[ip] = new
     return pos
 
-def proposeRandomStep(pos, stepsize = 0.05):
+def takeRandomStep(position, T, stepsize = 0.01):
     '''
         Takes in an array of particle positions of size (N,2), generates 
         random displacements according to parameter stepsize, projects the new
@@ -106,15 +120,25 @@ def proposeRandomStep(pos, stepsize = 0.05):
         array of positions.
     
     '''
-    for ip in range(len(pos)):
-        x = stepsize*np.random.uniform(low=-1.0,high=1.0)
-        y = stepsize*np.random.uniform(low=-1.0,high=1.0)
-        new = pos[ip] + [x,y]
-        newnorm = np.linalg.norm(new)
-        if newnorm > 1:
-            new /= newnorm
-        pos[ip] = new
-    return pos
+    # loop over particles
+    for index in range(len(position)):
+        
+        proposal = position
+        # propose a step in a random direction
+        theta = np.random.uniform(high = 2*pi)
+        x = stepsize*np.sin(theta)
+        y = stepsize*np.cos(theta)
+        
+        proposal[index] += [x,y]
+        
+        # normalize if it takes charge outside of the circle
+        norm = np.linalg.norm(proposal)
+        if norm > 1: proposal /= norm
+        
+        #decide whether to step or not based on temperature
+        position = decide(position, proposal, T)
+        
+    return position
 
 def decide(pos, newstep, T):
     '''
@@ -151,35 +175,41 @@ class AnimatedScatter(object):
     def __init__(self, history):
         self.stream = self.dataStream(history)
         self.fig, self.ax = plt.subplots()
+        self.frame = 0
+        self.length  = len(history)
         self.ani = animation.FuncAnimation(
             self.fig, self.update, init_func = self.setup_plot, 
-            blit = True, interval = 500)
+            blit = True, interval = 10, save_count=self.length-1)
 
     
     def dataStream(self, history):
-        i = -1
-        while True:
-            i += 1
+        i = 0
+        while i < len(history):
             yield history[i]
+            i += 1
             
     def setup_plot(self):
         particles = next(self.stream)
-        self.ax.set_title('Frame 0')
+        #self.ax.set_title('Frame 0')
         for number,charge in enumerate(particles):
             self.scat = self.ax.scatter(*charge)
             self.ax.annotate('{}'.format(number+1), charge)
         self.ax.axis([-1.1,1.1,-1.1,1.1])
+        self.ax.set_aspect('equal', adjustable='box')
         return self.scat,
         
     
     def update(self, frame):
+        self.frame += 1
         particles = next(self.stream)
+        print('\r plotting frame {} of {}'.format(self.frame,
+                                                  self.length), end="")
         self.ax.cla()
         for number,charge in enumerate(particles):
-            self.scat = self.ax.scatter(*charge)
+            self.scat = self.ax.scatter(*charge, color='k')
             self.ax.annotate('{}'.format(number+1), charge)
-        self.ax.set_title('Frame {}'.format(frame))
         self.ax.axis([-1.1,1.1,-1.1,1.1])
+        self.ax.set_aspect('equal', adjustable='box')
         return self.scat,
     
     def save(self):
