@@ -1,12 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import matplotlib.animation as animation
 from math import pi
 import warnings
 
 def main():
     # parameters
-    N = 13
+    N = 11
     iterations = 100
     T = np.e**2
     r = 0.01
@@ -21,21 +21,22 @@ def main():
     run = 0
     while T > 1e-9:   
         for i in range(1, iterations):
-            newstep = proposeRandomStep(pos)
+            newstep = proposeForcedStep(pos)
             pos = decide(pos, newstep, T)
             history[i] = pos
         print('\r Run {}, temperature {:.2e}'.format(run,T), end="")
         run += 1
-        T *= 0.95
-    
+        T *= 0.9
+        
     # plot movement
-    makePlots(history)
-    #makeMovie(history)
+    #makePlots(history)
+    movie = AnimatedScatter(history)
+    movie.save()
 
 def test():
     r = 1
-    N = 12
-    M = 11
+    N = 11
+    M = 10
     pos1 = np.array([[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)])
     pos2 = np.array([[r*np.cos(2*k*pi/M),r*np.sin(2*k*pi/M)] for k in range(M)])
     pos2 = np.append(pos2, np.array([[0,0]]),axis=0)
@@ -82,14 +83,14 @@ def proposeForcedStep(pos, stepsize = 0.05):
         and returns the new array of positions.
     
     '''
-    stepsize /= 2 
+    weight = 1
     forceArray = forces(pos)
     forceArray /= np.linalg.norm(forceArray,axis=1)[:,np.newaxis]
     for ip in range(len(pos)):
-        x = stepsize*forceArray[ip][0]
-        x += stepsize*np.random.uniform(low=-1.0,high=1.0) 
-        y = stepsize*forceArray[ip][1]
-        y += stepsize*np.random.uniform(low=-1.0,high=1.0)
+        x = stepsize*forceArray[ip][0]*weight
+        x += stepsize*np.random.uniform(low=-1.0,high=1.0)*(1-weight)
+        y = stepsize*forceArray[ip][1]*weight
+        y += stepsize*np.random.uniform(low=-1.0,high=1.0)*(1-weight)
         new = pos[ip] + [x,y]
         newnorm = np.linalg.norm(new)
         if newnorm > 1:
@@ -146,16 +147,43 @@ def makePlots(history):
     ax.add_patch(arena)
     plt.show()
     
-def makeMovie(history):
-    for pos in history:
-        fig = plt.figure()
-        ax = fig.add_subplot()
-        arena = plt.Circle((0, 0), 1, color='k',alpha = 0.1)
-        for p in pos:
-            plt.scatter(*p,c='b')
-        ax.set_aspect('equal', adjustable='box')
-        ax.add_patch(arena)
-        plt.show()
+class AnimatedScatter(object):
+    def __init__(self, history):
+        self.stream = self.dataStream(history)
+        self.fig, self.ax = plt.subplots()
+        self.ani = animation.FuncAnimation(
+            self.fig, self.update, init_func = self.setup_plot, 
+            blit = True, interval = 500)
+
+    
+    def dataStream(self, history):
+        i = -1
+        while True:
+            i += 1
+            yield history[i]
+            
+    def setup_plot(self):
+        particles = next(self.stream)
+        self.ax.set_title('Frame 0')
+        for number,charge in enumerate(particles):
+            self.scat = self.ax.scatter(*charge)
+            self.ax.annotate('{}'.format(number+1), charge)
+        self.ax.axis([-1.1,1.1,-1.1,1.1])
+        return self.scat,
+        
+    
+    def update(self, frame):
+        particles = next(self.stream)
+        self.ax.cla()
+        for number,charge in enumerate(particles):
+            self.scat = self.ax.scatter(*charge)
+            self.ax.annotate('{}'.format(number+1), charge)
+        self.ax.set_title('Frame {}'.format(frame))
+        self.ax.axis([-1.1,1.1,-1.1,1.1])
+        return self.scat,
+    
+    def save(self):
+        self.ani.save('animation.gif')
     
 if __name__ == '__main__':
     main()
