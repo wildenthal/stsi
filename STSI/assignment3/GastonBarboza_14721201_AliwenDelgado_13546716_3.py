@@ -34,7 +34,7 @@ def main():
         history[step] = positions
         T = cool(T)
     
-    makePlot(history[-1])
+    showParticles(history[-1])
     
     if False:
         #make movie
@@ -66,7 +66,7 @@ def test():
     asym = 'The energy for the asymmetric arrangement with {} particles is {}'
     print(asym.format(N,energy(posAsym)))
 
-def energy(pos):
+def energy(positions):
     '''
         Takes in array of particle positions of size (N,2), calculates 
         pairwise energy as sum_ij=1^N (1/|r_ij|) and returns it.
@@ -75,12 +75,12 @@ def energy(pos):
     
     '''
     warnings.simplefilter("ignore")
-    diff = pos[:,np.newaxis]-pos
+    diff = positions[:,np.newaxis] - positions
     distances = np.linalg.norm(diff, axis = 2)
     energies = (distances**-1)[~np.tri(len(distances),k=0,dtype=bool)]
     return np.sum(energies)
 
-def forces(pos):
+def forces(positions):
     '''
         Takes in array of particle positions of size (N,2), calculates 
         force on particle i as sum_j=1^N (r_ij/|r_ij|**3) and returns N forces.
@@ -89,7 +89,7 @@ def forces(pos):
     
     '''
     warnings.simplefilter("ignore")
-    diff = pos[:,np.newaxis]-pos
+    diff = positions[:,np.newaxis] - positions
     distances = np.linalg.norm(diff, axis = 2)
     forces = (diff/distances[:,:,np.newaxis]**3)
     forces = np.nan_to_num(forces, posinf = 0.0, neginf = 0.0)
@@ -164,7 +164,7 @@ def takeRandomStep(positions, T, stepsize = 0.01):
         
     return positions
 
-def decide(pos, newstep, T):
+def decide(positions, proposal, T):
     '''
         Takes in an array of particle positions, a proposed new array, and a 
         temperature T.
@@ -175,12 +175,13 @@ def decide(pos, newstep, T):
     
     '''
     
-    alpha = np.min([np.exp(-energy(newstep)/T)/np.exp(-energy(pos)/T),1])
+    alpha = np.exp(-energy(proposal)/T)/np.exp(-energy(positions)/T)
+    alpha = np.min([alpha,1])
     u = np.random.uniform()
-    pos = newstep if u <= alpha else pos
-    return pos
+    if u<= alpha: positions = proposal
+    return positions
 
-def makePlot(positions):
+def showParticles(positions):
     '''
         Takes in an array of particle positions and plots them
         onto a circular arena.
@@ -197,6 +198,9 @@ def makePlot(positions):
     ax.add_patch(arena)
     plt.show()
     
+def plotEnergy(history):
+    pass
+
 class AnimatedScatter(object):
     '''
         Is initialized with a vector containing arrays of particle positions.
