@@ -4,42 +4,45 @@ import matplotlib.animation as animation
 from math import pi
 import warnings
 from tqdm import tqdm
-from time import sleep
 
 def main():
     N = 11 # number of charges
 
     # sets an exponential cooling
     T0    = 1e2  #initial temperature
-    T1    = 1e-9 #final temperature
+    T1    = 1e-13 #final temperature
     rate  = 0.99 #cooling rate
-    steps = int(np.log(T1/T0)/np.log(rate)) #steps to reach cooling
+    steps = int(np.log(T1/T0)/np.log(rate)) #steps to reach final temoerature
     T = T0
     cool = lambda T: T*rate
     
     
     # set initial positions of particles as circle of radius r
-    r = 0.5
-    position = [[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)]
-    position = np.array(position)
+    r = 0.01
+    positions = [[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)]
+    positions = np.array(positions)
     
     #sets up history array
     history = np.empty((steps,N,2), dtype='float64')
-    history[0] = position
+    history[0] = positions
 
     # sample new positions
     T = T0
     for step in tqdm(range(1,steps)):
-        position = takeRandomStep(position, T)
-        history[step] = position
+        stepsize = 10/steps
+        positions = takeForcedStep(positions, T, stepsize = stepsize)
+        history[step] = positions
         T = cool(T)
     
-    #make movie
-    frames = 200
-    slicing = int(steps/frames) # array must be sliced to get specified frames
-    sliced = history[0::slicing]
-    movie = AnimatedScatter(sliced)
-    movie.save()
+    makePlot(history)
+    
+    if False:
+        #make movie
+        frames = 50
+        slicing = int(steps/frames) # array must be sliced to get specified frames
+        sliced = history[0::slicing]
+        movie = AnimatedScatter(sliced)
+        movie.save()
 
 def test():
     r = 1
@@ -49,15 +52,15 @@ def test():
     posSym = [[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)]
     posAsym = [[r*np.cos(2*k*pi/M),r*np.sin(2*k*pi/M)] for k in range(M)]
     
-    pos1 = np.array(posSym)
-    pos2 = np.array(posAsym)
-    pos2 = np.append(pos2, np.array([[0,0]]),axis=0)
-    history=[pos1,pos2]
-    makePlots(history)
+    posSym = np.array(posSym)
+    posAsym = np.array(posAsym)
+    posAsym = np.append(posAsym, np.array([[0,0]]),axis=0)
+    history=[posSym,posAsym]
+    makePlot(history)
     sym = 'The energy for the symmetric arrangement with {} particles is {}'
-    print(sym.format(N,energy(pos1)))
+    print(sym.format(N,energy(posSym)))
     asym = 'The energy for the asymmetric arrangement with {} particles is {}'
-    print(asym.format(N,energy(pos2)))
+    print(asym.format(N,energy(posAsym)))
 
 def energy(pos):
     '''
@@ -88,7 +91,7 @@ def forces(pos):
     forces = np.nan_to_num(forces, posinf = 0.0, neginf = 0.0)
     return np.sum(forces,axis=1)
 
-def proposeForcedStep(pos, stepsize = 0.005):
+def takeForcedStep(positions, T, stepsize = 0.01):
     '''
         Takes in an array of particle positions of size (N,2), generates 
         displacements according to parameter stepsize in the direction given
@@ -97,22 +100,31 @@ def proposeForcedStep(pos, stepsize = 0.005):
         and returns the new array of positions.
     
     '''
-    weight = 1
-    forceArray = forces(pos)
+    forceArray = forces(positions)
     forceArray /= np.linalg.norm(forceArray,axis=1)[:,np.newaxis]
-    for ip in range(len(pos)):
-        x = stepsize*forceArray[ip][0]*weight
-        x += stepsize*np.random.uniform(low=-1.0,high=1.0)*(1-weight)
-        y = stepsize*forceArray[ip][1]*weight
-        y += stepsize*np.random.uniform(low=-1.0,high=1.0)*(1-weight)
-        new = pos[ip] + [x,y]
-        newnorm = np.linalg.norm(new)
-        if newnorm > 1:
-            new /= newnorm
-        pos[ip] = new
-    return pos
+    # loop over particles
+    for index in range(len(positions)):
+        proposal = positions
+        
+        theta = np.random.vonmises(0,1/T) 
+        force = forceArray[index]*stepsize
+        
+        x = force[0]*np.cos(theta)  + force[1]*np.sin(theta)
+        y = force[0]*np.sin(-theta) + force[1]*np.cos(theta)
+        
+        proposal[index] += [x,y]
+        
+        # normalize if it takes charge outside of the circle
+        norm = np.linalg.norm(proposal[index])
+        if norm > 1: proposal[index] /= norm
+        
+        #decide whether to step or not based on temperature
+        positions = decide(positions, proposal, T)
+        
+    return positions
 
-def takeRandomStep(position, T, stepsize = 0.01):
+
+def takeRandomStep(positions, T, stepsize = 0.01):
     '''
         Takes in an array of particle positions of size (N,2), generates 
         random displacements according to parameter stepsize, projects the new
@@ -121,9 +133,9 @@ def takeRandomStep(position, T, stepsize = 0.01):
     
     '''
     # loop over particles
-    for index in range(len(position)):
+    for index in range(len(positions)):
         
-        proposal = position
+        proposal = positions
         # propose a step in a random direction
         theta = np.random.uniform(high = 2*pi)
         x = stepsize*np.sin(theta)
@@ -136,9 +148,9 @@ def takeRandomStep(position, T, stepsize = 0.01):
         if norm > 1: proposal /= norm
         
         #decide whether to step or not based on temperature
-        position = decide(position, proposal, T)
+        positions = decide(positions, proposal, T)
         
-    return position
+    return positions
 
 def decide(pos, newstep, T):
     '''
@@ -155,10 +167,9 @@ def decide(pos, newstep, T):
     pos = newstep if u <= alpha else pos
     return pos
 
-def makePlots(history):
+def makePlot(history):
     fig = plt.figure()
     ax = fig.add_subplot()
-    initial = history[0]
     final = history[-1]
     
     #for p in initial:
@@ -184,6 +195,8 @@ class AnimatedScatter(object):
     
     def dataStream(self, history):
         i = 0
+        yield history[0]
+        yield history[0]
         while i < len(history):
             yield history[i]
             i += 1
@@ -203,7 +216,7 @@ class AnimatedScatter(object):
         self.frame += 1
         particles = next(self.stream)
         print('\r plotting frame {} of {}'.format(self.frame,
-                                                  self.length), end="")
+                                                  self.length-1), end="")
         self.ax.cla()
         for number,charge in enumerate(particles):
             self.scat = self.ax.scatter(*charge, color='k')
