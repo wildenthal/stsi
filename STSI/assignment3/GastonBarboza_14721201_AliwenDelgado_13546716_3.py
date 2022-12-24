@@ -35,8 +35,9 @@ def main():
         T = cool(step)
     
     showParticles(history[-1])
-    plt.savefig('charges.jpg')
+    plt.savefig('charges.jpg', dpi=300)
     plotEnergy(historyT, history)
+    plt.savefig('energy.jpg', dpi=300)
     
     np.save('{}charges{}{}{}.npy'.format(N,T0,method,T1),history)
     
