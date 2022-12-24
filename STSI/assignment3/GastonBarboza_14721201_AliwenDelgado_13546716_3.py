@@ -6,18 +6,16 @@ import warnings
 from tqdm import tqdm
 
 def main():
-    N = 11 # number of charges
-
-    # sets an exponential cooling
-    T0    = 1e2  #initial temperature
-    T1    = 1e-13 #final temperature
-    rate  = 0.99 #cooling rate
-    steps = int(np.log(T1/T0)/np.log(rate)) #steps to reach final temoerature
-    T = T0
-    cool = lambda T: T*rate
     
+    N = int(input('Enter number of charges: '))
+    T0 = float(input('Enter initial temperature: '))
+    T1 = float(input('Enter final temperature: '))
+    m = 'Enter cooling method: exponential, logarithmical, linear, quadratic: '
+    method = input(m)
+    steps, cool = cooling(T0, T1, method)
     
     # set initial positions of particles as circle of radius r
+    T = T0
     r = 0.01
     positions = [[r*np.cos(2*k*pi/N),r*np.sin(2*k*pi/N)] for k in range(N)]
     positions = np.array(positions)
@@ -25,21 +23,25 @@ def main():
     #sets up history array
     history = np.empty((steps,N,2), dtype='float64')
     history[0] = positions
+    historyT = np.empty((steps))
+    historyT[0] = T
 
     # sample new positions
-    T = T0
     for step in tqdm(range(1,steps)):
         stepsize = 10/steps
         positions = takeForcedStep(positions, T, stepsize = stepsize)
         history[step] = positions
-        T = cool(T)
+        historyT[step] = T
+        T = cool(step)
     
     showParticles(history[-1])
+    plotEnergy(historyT, history)
     
-    if False:
-        #make movie
+    np.save('{}charges{}{}{}.npy'.format(N,T0,method,T1),history)
+    
+    if input('Make movie? y/n: '=='y'):
         frames = 50
-        slicing = int(steps/frames) # array must be sliced to get specified frames
+        slicing = int(steps/frames) # must slice array to get specified frames
         sliced = history[0::slicing]
         movie = AnimatedScatter(sliced)
         movie.save()
@@ -58,9 +60,9 @@ def test():
     
     posSym = np.array(posSym)
     posAsym = np.array(posAsym)
+    
     posAsym = np.append(posAsym, np.array([[0,0]]),axis=0)
-    history=[posSym,posAsym]
-    makePlot(history)
+    
     sym = 'The energy for the symmetric arrangement with {} particles is {}'
     print(sym.format(N,energy(posSym)))
     asym = 'The energy for the asymmetric arrangement with {} particles is {}'
@@ -114,7 +116,7 @@ def takeForcedStep(positions, T, stepsize = 0.01):
     for index in range(len(positions)):
         proposal = positions
         
-        theta = np.random.vonmises(0,1/T) 
+        theta = np.random.vonmises(0,0.6) 
         force = forceArray[index]*stepsize
         
         x = force[0]*np.cos(theta)  + force[1]*np.sin(theta)
@@ -179,7 +181,36 @@ def decide(positions, proposal, T):
     alpha = np.min([alpha,1])
     u = np.random.uniform()
     if u<= alpha: positions = proposal
-    return positions
+    return positions  
+
+def cooling(T0, T1, method):
+    if method == "exponential":
+        prompt = 'Enter rate for exponential cooling: '
+        rate = float(input(prompt))
+        steps = int(np.log(T1/T0)/np.log(rate))
+        cool = lambda step: T0*rate**step
+    if method == "logarithmical":
+        prompt = 'Enter cooling speed-up for logarithmical cooling: '
+        alpha = float(input(prompt))
+        steps = int(1 + np.exp((T0+T1)/(alpha*T1)))
+        cool = lambda step: T0/(1+np.log(1+step))
+    if method == "linear":
+        prompt = 'Enter factor for linear cooling: '
+        alpha = float(input(prompt))
+        steps = int(T0-T1/(alpha*T1))
+        cool = lambda step: T0/(1+alpha*step)
+    if method == "quadratic":
+        prompt = 'Enter factor for quadratic cooling: '
+        alpha = float(input(prompt))
+        steps = int(np.sqrt(T0-T1/(alpha*T1)))
+        cool = lambda step: T0/(1+alpha*step**2)
+    return steps, cool
+
+''' 
+######################################
+      Below are plotting tools
+######################################
+'''
 
 def showParticles(positions):
     '''
@@ -198,8 +229,19 @@ def showParticles(positions):
     ax.add_patch(arena)
     plt.show()
     
-def plotEnergy(history):
-    pass
+def plotEnergy(historyT, history): 
+    '''
+        Takes in an array of particle positions and the log10 of their energies
+        as a function of the log10 of the temperature at that point 
+        in the simulation.
+    
+    '''
+    energies = np.array([np.log10(energy(positions)) for positions in history])
+    fig, ax = plt.subplots()
+    ax.plot(np.log10(historyT), energies)
+    ax.invert_xaxis()
+    ax.set_xlabel("log10 of temperature")
+    ax.set_ylabel("log10 of energy")
 
 class AnimatedScatter(object):
     '''
