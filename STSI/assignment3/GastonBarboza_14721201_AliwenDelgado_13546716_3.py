@@ -35,11 +35,12 @@ def main():
         T = cool(step)
     
     showParticles(history[-1])
+    plt.savefig('charges.jpg')
     plotEnergy(historyT, history)
     
     np.save('{}charges{}{}{}.npy'.format(N,T0,method,T1),history)
     
-    if input('Make movie? y/n: '=='y'):
+    if input('Make movie? y/n: ')=='y':
         frames = 50
         slicing = int(steps/frames) # must slice array to get specified frames
         sliced = history[0::slicing]
@@ -222,12 +223,11 @@ def showParticles(positions):
     ax = fig.add_subplot()
 
     for i,p in enumerate(positions):
-        plt.scatter(*p,c='r')
+        plt.scatter(*p,c='k')
         plt.annotate('{}'.format(i+1), p)
     ax.set_aspect('equal', adjustable='box')
     arena = plt.Circle((0, 0), 1, color='k',alpha = 0.1)
     ax.add_patch(arena)
-    plt.show()
     
 def plotEnergy(historyT, history): 
     '''
