@@ -34,7 +34,7 @@ def main():
         history[step] = positions
         T = cool(T)
     
-    makePlot(history)
+    makePlot(history[-1])
     
     if False:
         #make movie
@@ -45,6 +45,10 @@ def main():
         movie.save()
 
 def test():
+    '''
+        Compares minimum energies for N particles arranged symmetrically
+        or with one charge placed in the center.
+    '''
     r = 1
     N = 11
     M = N-1
@@ -93,11 +97,15 @@ def forces(pos):
 
 def takeForcedStep(positions, T, stepsize = 0.01):
     '''
-        Takes in an array of particle positions of size (N,2), generates 
-        displacements according to parameter stepsize in the direction given
-        by the force on the particle, another stochastic step, and projects 
-        the new positions back into the circle if they lie outside, 
-        and returns the new array of positions.
+        Takes in an array of particle positions of size (N,2), and for each 
+        particle generates a displacement according to parameter stepsize and
+        in the direction given by the force on the particle, but perturbed by
+        an angle sampled from the random circular distribution. 
+        If the new position lies outside of the circle, it is projected
+        back inside.
+        The displacement is passed to the decide function, and is accepted
+        or rejected based on the temperature.
+        The array of new particle positions is then returned.
     
     '''
     forceArray = forces(positions)
@@ -126,10 +134,14 @@ def takeForcedStep(positions, T, stepsize = 0.01):
 
 def takeRandomStep(positions, T, stepsize = 0.01):
     '''
-        Takes in an array of particle positions of size (N,2), generates 
-        random displacements according to parameter stepsize, projects the new
-        positions back into the circle if they lie outside, and returns the new
-        array of positions.
+        Takes in an array of particle positions of size (N,2), and for each
+        particle generates a uniformly sampled random displacement according 
+        to the parameter stepsize.
+        If the new position lies outside of the circle, it is projected
+        back inside.
+        The displacement is passed to the decide function, and is accepted
+        or rejected based on the temperature.
+        The array of new particle positions is then returned.
     
     '''
     # loop over particles
@@ -155,10 +167,11 @@ def takeRandomStep(positions, T, stepsize = 0.01):
 def decide(pos, newstep, T):
     '''
         Takes in an array of particle positions, a proposed new array, and a 
-        temperature T, generates random float, checks if it below the
+        temperature T.
+        Generates random float, checks if it below the
         threshhold corresponding to the temperature and position energies,
-        and decides whether to step the array forward or stay still, and
-        returns the updated array.
+        and decides whether to step the array forward or stay still.
+        Returns the updated array.
     
     '''
     
@@ -167,14 +180,16 @@ def decide(pos, newstep, T):
     pos = newstep if u <= alpha else pos
     return pos
 
-def makePlot(history):
+def makePlot(positions):
+    '''
+        Takes in an array of particle positions and plots them
+        onto a circular arena.
+    
+    '''
     fig = plt.figure()
     ax = fig.add_subplot()
-    final = history[-1]
-    
-    #for p in initial:
-    #    plt.scatter(*p,c='b')
-    for i,p in enumerate(final):
+
+    for i,p in enumerate(positions):
         plt.scatter(*p,c='r')
         plt.annotate('{}'.format(i+1), p)
     ax.set_aspect('equal', adjustable='box')
@@ -183,6 +198,12 @@ def makePlot(history):
     plt.show()
     
 class AnimatedScatter(object):
+    '''
+        Is initialized with a vector containing arrays of particle positions.
+        Creates an animation displaying the movement of the particles.
+    
+    '''
+    
     def __init__(self, history):
         self.stream = self.dataStream(history)
         self.fig, self.ax = plt.subplots()
@@ -203,7 +224,6 @@ class AnimatedScatter(object):
             
     def setup_plot(self):
         particles = next(self.stream)
-        #self.ax.set_title('Frame 0')
         for number,charge in enumerate(particles):
             self.scat = self.ax.scatter(*charge)
             self.ax.annotate('{}'.format(number+1), charge)
